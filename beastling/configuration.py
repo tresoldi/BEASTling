@@ -17,6 +17,7 @@ import beastling.clocks.random as random
 import beastling.models.bsvs as bsvs
 import beastling.models.covarion as covarion
 import beastling.models.mk as mk
+import beastling.models.correlated as correlated
 
 
 
@@ -347,6 +348,8 @@ class Configuration(object):
                 if "mk_used" not in self.message_flags:
                     self.message_flags.append("mk_used")
                     self.messages.append(mk.MKModel.package_notice)
+            elif config["model"].lower() == "correlated":
+                model = correlated.CorrelatedModel(config, self)
             else:
                 model_name = config["model"].lower()
                 try:
