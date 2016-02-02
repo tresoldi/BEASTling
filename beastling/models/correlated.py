@@ -50,7 +50,7 @@ class CorrelatedModel(BaseModel):
         bad_traits = []
         for trait in self.traits:
             all_values = [self.data[l][trait] for l in self.data]
-            all_values = [v for v in all_values if v != "?"]
+            all_values = [v for v in all_values if v != "?" if v != "-"]
             uniq = list(set(all_values))
             counts = {}
             for v in all_values:
@@ -61,7 +61,7 @@ class CorrelatedModel(BaseModel):
             # If we sort these as strings then we get weird things like "10" < "2".
             # This can actually matter for things like ordinal models.
             # So convert these to ints first...
-            if all([v.isdigit() for v in uniq]):
+            if all([v==str(int(v)) for v in uniq]):
                 uniq = map(int, uniq)
                 uniq.sort()
                 uniq = map(str, uniq)
@@ -131,14 +131,17 @@ class CorrelatedModel(BaseModel):
         if max(self.valuecounts.values()) > 10:
             raise NotImplementedError("The code is too simple to work with traits with more than 10 different values.")
         for lang in self.config.languages:
-            valuestring = ";;".join("%d" % 
-                list(self.counts[trait].keys()).index(self.data[lang][trait])
+            valuestring = ";;".join("%s" % 
+                self.data[lang][trait]
                 for trait in self.traits)
             seq = ET.SubElement(data, "sequence", {"id":"seq_%s_%s" % (lang, traitname), "taxon":lang, "value":valuestring})
         userdatatype = ET.SubElement(
             data, "userDataType",
             {"id": "traitDataType.%s"%traitname,
              "split": ";;",
+             # The componentSizes are bigger than the valuecounts because of the way ambiguities ("?" and "-", so 2) are encoded.
+             # NOTE: Once we start to support ambiguities, this line needs adapting! 
+             "componentSizesIncludingAmbiguities": " ".join(str(self.valuecounts[trait]+2) for trait in self.traits),
              "spec":
               "correlatedcharacters.polycharacter.CompoundDataType"})
         for trait in self.traits:
@@ -146,7 +149,7 @@ class CorrelatedModel(BaseModel):
                 userdatatype, "components",
                 {"id":"traitDataType.%s:%s"%(traitname,trait),
                  "spec":"beast.evolution.datatype.UserDataType",
-                 "codeMap":self.build_codemap(range(self.valuecounts[trait])),
+                 "codeMap":self.codemaps[trait],
                  "states":str(self.valuecounts[trait]),
                  "characterName": trait,
                 })
