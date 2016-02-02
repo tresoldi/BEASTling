@@ -1,5 +1,7 @@
 import codecs
 import os
+import itertools
+import math
 import xml.etree.ElementTree as ET
 
 import scipy.stats
@@ -7,116 +9,227 @@ import scipy.stats
 from .basemodel import BaseModel
 from ..fileio.unicodecsv import UnicodeDictReader
 
+class IncompatibleSettingOptions(Warning): pass
+
+# We make some use of a product function.
+from operator import mul
+try:
+    from functools import reduce
+except ImportError:
+    pass
+def product(iterable):
+    return reduce(mul, iterable, 1)
+    
+
 class CorrelatedModel(BaseModel):
 
     def __init__(self, model_config, global_config):
-
+        if model_config.get("rate_variation", False):
+            raise IncompatibleSettingOptions("Please do not specify rate_variation.")
         BaseModel.__init__(self, model_config, global_config)
-        self.symmetric = model_config.get("symmetric", True)
-        self.svsprior = model_config.get("svsprior", "exponential")
+
+    def preprocess(self):
+        # Remove features which are in the config but not the
+        # data file
+        traits = [t for t in self.traits if
+                any([t in self.data[lang] for lang in self.data]
+                    )]
+
+        # Remove features which are in the config but are entirely
+        # question marks for the specified languages.
+        traits = [t for t in traits if
+                not all([self.data[lang][t] == "?" for lang in self.data]
+                    )]
+
+        # To start with, this trait has one value ("") and zero rates
+        # in between.
+        self.valuecounts = {}
+        self.dimensions = {}
+        self.counts = {}
+        self.codemaps = {}
+        bad_traits = []
+        for trait in self.traits:
+            all_values = [self.data[l][trait] for l in self.data]
+            all_values = [v for v in all_values if v != "?"]
+            uniq = list(set(all_values))
+            counts = {}
+            for v in all_values:
+                counts[v] = all_values.count(v)
+            uniq = list(set(all_values))
+            # Sort uniq carefully.
+            # Possibly all feature values are numeric strings, e.g. "1", "2", "3".
+            # If we sort these as strings then we get weird things like "10" < "2".
+            # This can actually matter for things like ordinal models.
+            # So convert these to ints first...
+            if all([v.isdigit() for v in uniq]):
+                uniq = map(int, uniq)
+                uniq.sort()
+                uniq = map(str, uniq)
+            # ...otherwise, just sort normally
+            else:
+                uniq.sort()
+            if len(uniq) == 0 or (len(uniq) == 1 and self.remove_constant_traits):
+                bad_traits.append(trait)
+                continue
+            N = len(uniq)
+
+            self.valuecounts[trait] = N
+            self.dimensions[trait] = N*(N-1)/2
+            self.codemaps[trait] = self.build_codemap(uniq)
+            self.counts[trait] = counts
+        self.traits = [t for t in self.traits if t not in bad_traits]
+        self.traits.sort()
+        self.max_n_rates = (product(self.valuecounts.values()) * sum([i-1 for i in self.valuecounts.values()]))
 
     def add_state(self, state):
+        self.add_clock_state(state)
 
-        BaseModel.add_state(self, state)
-        for trait in self.traits:
-            traitname = "%s:%s" % (self.name, trait)
+        trait = "compound"
+        traitname = "%s:%s" % (self.name, trait)
+        
+        parameter = ET.SubElement(
+            state, "parameter",
+            {"dimension": str(self.max_n_rates),
+             "id": "rawRates.s:%s" % traitname,
+             "name": "stateNode"})
+        parameter.text="1.0"
 
-            attribs = {}
-            attribs["dimension"] = str(self.dimensions[trait])
-            attribs["id"] = "rateIndicator.s:%s" % traitname
-            attribs["spec"] = "parameter.BooleanParameter"
-            statenode = ET.SubElement(state, "stateNode", attribs)
-            statenode.text="true"
+        groupings = ET.SubElement(
+            state, "parameter",
+            {"spec": "beast.core.parameter.IntegerParameter",
+             "dimension" : str(self.max_n_rates),
+             "id" : "rateGroupings.s:%s" % traitname,
+             "name" : "stateNode"})
+        groupings.text=" ".join(map(str, range(self.max_n_rates)))
 
-            attribs = {}
-            attribs["dimension"] = str(self.dimensions[trait])
-            attribs["id"] = "relativeGeoRates.s:%s" % traitname
-            attribs["name"] = "stateNode"
-            parameter = ET.SubElement(state, "parameter", attribs)
-            parameter.text="1.0"
+        sizes = ET.SubElement(
+            state, "parameter",
+            {"spec": "beast.core.parameter.IntegerParameter",
+             "dimension" : str(self.max_n_rates),
+             "id" : "rateGroupingSizes.s:%s" % traitname,
+             "name" : "stateNode"})
+        sizes.text="1"
 
     def add_prior(self, prior):
+        self.add_clock_prior(prior)
 
-        BaseModel.add_prior(self, prior)
-        for n, trait in enumerate(self.traits):
-            traitname = "%s:%s" % (self.name, trait)
+        trait = "compound"
+        n = 0
+        traitname = "%s:%s" % (self.name, trait)
 
-            # Boolean Rate on/off
-            sub_prior = ET.SubElement(prior, "prior", {"id":"nonZeroRatePrior.s:%s" % traitname, "name":"distribution"})
-            x = ET.SubElement(sub_prior, "x", {"arg":"@rateIndicator.s:%s" % traitname, "spec":"util.Sum"})
-            N = self.valuecounts[trait]
-            if self.svsprior == "poisson":
-                distr  = ET.SubElement(sub_prior, "distr", {"id":"Poisson:%s.%d" % (traitname, n), "offset":str(self.valuecounts[trait]-1),"spec":"beast.math.distributions.Poisson"})
-                param = ET.SubElement(distr, "parameter", {"id":"RealParameter:%s.%d.0" % (traitname, n),"lower":"0.0","name":"lambda","upper":"0.0"})
-                poisson_mean = 1
-                while scipy.stats.poisson.cdf(N*(N-1)/2.0-(N-1), poisson_mean) > 0.99:
-                    poisson_mean += 0.1
-                param.text = str(poisson_mean)
-            elif self.svsprior == "exponential":
-                exponential_mean = 1
-                if self.symmetric:
-                    offset = N-1
-                    cutoff = 0.333
-                    maxx = N*(N-1)/2.0
-                else:
-                    offset = N
-                    cutoff = 0.333
-                    maxx = N*(N-1)
-                while scipy.stats.expon.cdf(cutoff*maxx-offset, exponential_mean) > 0.95:
-                    exponential_mean += 0.1
-                distr  = ET.SubElement(sub_prior, "distr", {"id":"Exponential:%s.%d" % (traitname, n), "offset":str(offset),"spec":"beast.math.distributions.Exponential"})
-                param = ET.SubElement(distr, "parameter", {"id":"RealParameter:%s.%d.0" % (traitname, n),"lower":"0.0","name":"mean","upper":"0.0"})
-                param.text = str(exponential_mean)
+        # Relative rate
+        sub_prior = ET.SubElement(prior, "prior", {"id":"ratesPrior.s:%s" % traitname, "name":"distribution","x":"@rawRates.s:%s"% traitname})
+        dirichlet  = ET.SubElement(
+            sub_prior, "distr",
+            {"id":"Dirichlet:%s.%d.0" % (traitname, n),
+             "sizes" : "@rateGroupingSizes.s:%s" % traitname,
+             "spec": "parameterclone.helpers.RescaledDirichlet"})
 
-            # Relative rate
-            sub_prior = ET.SubElement(prior, "prior", {"id":"relativeGeoRatesPrior.s:%s" % traitname, "name":"distribution","x":"@relativeGeoRates.s:%s"% traitname})
-            gamma  = ET.SubElement(sub_prior, "Gamma", {"id":"Gamma:%s.%d.0" % (traitname, n), "name":"distr"})
-            param = ET.SubElement(gamma, "parameter", {"id":"RealParameter:%s.%d.1" % (traitname, n),"lower":"0.0","name":"alpha","upper":"0.0"})
-            param.text = "1.0"
-            param = ET.SubElement(gamma, "parameter", {"id":"RealParameter:%s.%d.2" % (traitname, n),"lower":"0.0","name":"beta","upper":"0.0"})
-            param.text = "1.0"
+    def add_data(self, distribution, trait, traitname):
+        data = ET.SubElement(distribution,"data",{"id":traitname, "spec":"Alignment"})
+        # How many characters do we need to reserve?
+        if max(self.valuecounts.values()) > 10:
+            raise NotImplementedError("The code is too simple to work with traits with more than 10 different values.")
+        for lang in self.config.languages:
+            valuestring = ";;".join("%d" % 
+                list(self.counts[trait].keys()).index(self.data[lang][trait])
+                for trait in self.traits)
+            seq = ET.SubElement(data, "sequence", {"id":"seq_%s_%s" % (lang, traitname), "taxon":lang, "value":valuestring})
+        userdatatype = ET.SubElement(
+            data, "userDataType",
+            {"id": "traitDataType.%s"%traitname,
+             "split": ";;",
+             "spec":
+              "correlatedcharacters.polycharacter.CompoundDataType"})
+        for trait in self.traits:
+            subdatatype = ET.SubElement(
+                userdatatype, "components",
+                {"id":"traitDataType.%s:%s"%(traitname,trait),
+                 "spec":"beast.evolution.datatype.UserDataType",
+                 "codeMap":self.build_codemap(range(self.valuecounts[trait])),
+                 "states":str(self.valuecounts[trait]),
+                 "characterName": trait,
+                })
 
+    def add_likelihood(self, likelihood):
+        trait = "compound"
+        traitname = "%s:%s" % (self.name, trait)
+        distribution = ET.SubElement(likelihood, "distribution",{"id":"traitedtreeLikelihood.%s" % traitname,"spec":"TreeLikelihood","useAmbiguities":"true"})
+
+        tree = ET.SubElement(distribution, "tree", {"idref":"Tree.t:beastlingTree"})
+
+        # Sitemodel
+        self.add_sitemodel(distribution, trait, traitname)
+
+        # Branchrate
+        branchrate = ET.SubElement(distribution, "branchRateModel", {"id":"StrictClockModel.c:%s"%traitname,"spec":"beast.evolution.branchratemodel.StrictClockModel","clock.rate":"@clockRate.c:%s" % self.name})
+
+        # Data
+        self.add_data(distribution, trait, traitname)
+        
     def add_sitemodel(self, distribution, trait, traitname):
+        if trait != "compound":
+            raise ValueError("There should only be a 'compound' trait")
 
-            # Sitemodel
-            if self.rate_variation:
-                mr = "@mutationRate:%s" % traitname
-            else:
-                mr = "1.0"
-            sitemodel = ET.SubElement(distribution, "siteModel", {"id":"SiteModel.%s"%traitname,"spec":"SiteModel", "mutationRate":mr,"shape":"1","proportionInvariant":"0"})
+        # Sitemodel
+        sitemodel = ET.SubElement(distribution, "siteModel", {"id":"SiteModel.%s"%traitname,"spec":"SiteModel", "shape":"1","proportionInvariant":"0"})
 
-            if self.symmetric:
-                substmodel = ET.SubElement(sitemodel, "substModel",{"id":"svs.s:%s"%traitname,"rateIndicator":"@rateIndicator.s:%s"%traitname,"rates":"@relativeGeoRates.s:%s"%traitname,"spec":"SVSGeneralSubstitutionModel"})
-            else:
-                substmodel = ET.SubElement(sitemodel, "substModel",{"id":"svs.s:%s"%traitname,"rateIndicator":"@rateIndicator.s:%s"%traitname,"rates":"@relativeGeoRates.s:%s"%traitname,"spec":"SVSGeneralSubstitutionModel", "symmetric":"false"})
-            freq = ET.SubElement(substmodel,"frequencies",{"id":"traitfreqs.s:%s"%traitname,"spec":"Frequencies"})
-            if self.frequencies == "uniform":
-                freq_string = str(1.0/self.valuecounts[trait])
-            elif self.frequencies == "empirical":
-                freqs = [self.counts[trait].get(str(v),0) for v in range(1,self.valuecounts[trait]+1)]
-                norm = float(sum(freqs))
-                freqs = [f/norm for f in freqs]
-                # Sometimes, due to WALS oddities, there's a zero frequency, and that makes BEAST sad.  So do some smoothing in these cases:
-                if 0 in freqs:
-                    freqs = [0.1/self.valuecounts[trait] + 0.9*f for f in freqs]
-                norm = float(sum(freqs))
-                freq_string = " ".join([str(c/norm) for c in freqs])
-            ET.SubElement(freq,"parameter",{
-                "dimension":str(self.valuecounts[trait]),
-                "id":"traitfrequencies.s:%s"%traitname,
-                "name":"frequencies"}).text=freq_string
+        substmodel = ET.SubElement(
+            sitemodel, "substModel",
+            {"id":"substitutionmodel.s:%s"%traitname,
+             "spec":"correlatedcharacters.polycharacter.CorrelatedSubstitutionModel"})
+        actualrates = ET.SubElement(
+            substmodel, "rates",
+            {"id": "actualRates.s:%s"%traitname,
+             "spec": "parameterclone.selector.SelectorSet",
+             "entry": " ".join(str(i) for i in range(self.max_n_rates)),
+             "parameters": "@rawRates.s:%s" % traitname,
+             "groupings": "@rateGroupings.s:%s" % traitname,
+             "sizes" : "@rateGroupingSizes.s:%s" % traitname,
+            })
+        shape = ET.SubElement(substmodel, "datatype",
+                              {"idref":"traitDataType.%s"%traitname})
+        freq = ET.SubElement(substmodel,"frequencies",{"id":"traitfreqs.s:%s"%traitname,"spec":"Frequencies"})
+        states = product(self.valuecounts.values())
+        freq_string = str(1./states)
+        ET.SubElement(freq,"parameter",{
+            "dimension":str(states),
+            "id":"traitfrequencies.s:%s"%traitname,
+            "name":"frequencies"}).text=freq_string
 
     def add_operators(self, run):
 
         BaseModel.add_operators(self, run)
-        for n, trait in enumerate(self.traits):
-            traitname = "%s:%s" % (self.name, trait)
-            ET.SubElement(run, "operator", {"id":"onGeorateScaler.s:%s"% traitname,"spec":"ScaleOperator","parameter":"@relativeGeoRates.s:%s"%traitname, "indicator":"@rateIndicator.s:%s" % traitname, "scaleAllIndependently":"true","scaleFactor":"1.0","weight":"10.0"})
 
-            ET.SubElement(run, "operator", {"id":"indicatorFlip.s:%s"%traitname,"spec":"BitFlipOperator","parameter":"@rateIndicator.s:%s"%traitname, "weight":"30.0"})
-            if self.rate_variation:
-                ET.SubElement(run, "operator", {"id":"BSSVSoperator.c:%s"%traitname,"spec":"BitFlipBSSVSOperator","indicator":"@rateIndicator.s:%s"%traitname, "mu":"@traitClockRate.c:%s" % traitname,"weight":"30.0"})
-            else:
-                ET.SubElement(run, "operator", {"id":"BSSVSoperator.c:%s"%traitname,"spec":"BitFlipBSSVSOperator","indicator":"@rateIndicator.s:%s"%traitname, "mu":"@clockRate.c:%s" % self.name,"weight":"30.0"})
-            sampoffop = ET.SubElement(run, "operator", {"id":"offGeorateSampler:%s" % traitname,"spec":"SampleOffValues","all":"false","values":"@relativeGeoRates.s:%s"%traitname, "indicators":"@rateIndicator.s:%s" % traitname, "weight":"30.0"})
-            ET.SubElement(sampoffop, "dist", {"idref":"Gamma:%s.%d.0" % (traitname, n)})
+        trait = "compound"
+        traitname = "%s:%s" % (self.name, trait)
+
+        ET.SubElement(
+            run, "operator",
+            {"id": "merger:%s" % traitname,
+             "spec": "parameterclone.splitandmerge.MergeOperator",
+             "parameters": "@rawRates.s:%s" % traitname,
+             "groupings": "@rateGroupings.s:%s" % traitname,
+             "sizes": "@rateGroupingSizes.s:%s" % traitname,
+             "weight": "10.0"
+             })
+
+        ET.SubElement(
+            run, "operator",
+            {"id": "splitter:%s" % traitname,
+             "spec": "parameterclone.splitandmerge.SplitOperator",
+             "parameters": "@rawRates.s:%s" % traitname,
+             "groupings": "@rateGroupings.s:%s" % traitname,
+             "sizes": "@rateGroupingSizes.s:%s" % traitname,
+             "weight": "10.0"
+             })
+
+    def add_param_logs(self, logger):
+        BaseModel.add_param_logs(self, logger)
+        trait = "compound"
+        traitname = "%s:%s" % (self.name, trait)
+        ET.SubElement(
+            logger, "log",
+            {"id": "independencyLogger.s:%s" % traitname,
+             "spec": "correlatedcharacters.polycharacter.IndependencyLogger",
+             "model": "@substitutionmodel.s:%s" % traitname})

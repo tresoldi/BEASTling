@@ -169,7 +169,18 @@ class BaseModel(object):
     def add_misc(self, beast):
         pass
 
+    def add_clock_state(self, state):
+
+        # Clock
+        attribs = {}
+        attribs["id"] = "clockRate.c:%s" % self.name
+        attribs["name"] = "stateNode"
+        parameter = ET.SubElement(state, "parameter", attribs)
+        parameter.text="1.0"
+        
+
     def add_state(self, state):
+        self.add_clock_state(state)
 
         # Mutation rates
         if self.rate_variation:
@@ -186,7 +197,15 @@ class BaseModel(object):
             parameter = ET.SubElement(state, "parameter", {"id":"featureClockRateGammaScale:%s" % self.name, "name":"stateNode"})
             parameter.text="0.5"
 
+    def add_clock_prior(self, prior):
+
+        # Clock
+        sub_prior = ET.SubElement(prior, "prior", {"id":"clockPrior:%s" % self.name, "name":"distribution","x":"@clockRate.c:%s" % self.name})
+        uniform = ET.SubElement(sub_prior, "Uniform", {"id":"UniformClockPrior:%s" % self.name, "name":"distr", "upper":"Infinity"})
+
+        
     def add_prior(self, prior):
+        self.add_clock_prior(prior)
 
         # Mutation rates
         if self.rate_variation:
