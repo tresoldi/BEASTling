@@ -184,11 +184,10 @@ class CorrelatedModel(BaseModel):
         actualrates = ET.SubElement(
             substmodel, "rates",
             {"id": "actualRates.s:%s"%traitname,
-             "spec": "parameterclone.selector.SelectorSet",
+             "spec": "parameterclone.selector.Selector",
              "entry": " ".join(str(i) for i in range(self.max_n_rates)),
              "parameters": "@rawRates.s:%s" % traitname,
              "groupings": "@rateGroupings.s:%s" % traitname,
-             "sizes" : "@rateGroupingSizes.s:%s" % traitname,
             })
         shape = ET.SubElement(substmodel, "datatype",
                               {"idref":"traitDataType.%s"%traitname})
@@ -231,6 +230,7 @@ class CorrelatedModel(BaseModel):
         BaseModel.add_param_logs(self, logger)
         trait = "compound"
         traitname = "%s:%s" % (self.name, trait)
+        ET.SubElement(logger,"log",{"idref":"actualRates.s:%s" % traitname})
         ET.SubElement(
             logger, "log",
             {"id": "independencyLogger.s:%s" % traitname,
