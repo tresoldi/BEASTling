@@ -31,14 +31,18 @@ class CorrelatedModel(BaseModel):
     def preprocess(self):
         # Remove features which are in the config but not the
         # data file
-        traits = [t for t in self.traits if
-                any([t in self.data[lang] for lang in self.data]
+        if self.config.languages == ["*"]:
+            self.languages = self.data.keys()
+        else:
+            self.languages = set(self.config.languages) & set(self.data.keys())
+        traits = [t for t in self.features if
+                any([t in self.data[lang] for lang in self.languages]
                     )]
 
         # Remove features which are in the config but are entirely
         # question marks for the specified languages.
         traits = [t for t in traits if
-                not all([self.data[lang][t] == "?" for lang in self.data]
+                not all([self.data[lang][t] == "?" for lang in self.languages]
                     )]
 
         # To start with, this trait has one value ("") and zero rates
@@ -48,8 +52,8 @@ class CorrelatedModel(BaseModel):
         self.counts = {}
         self.codemaps = {}
         bad_traits = []
-        for trait in self.traits:
-            all_values = [self.data[l][trait] for l in self.data]
+        for trait in self.features:
+            all_values = [self.data[l][trait] for l in self.languages]
             all_values = [v for v in all_values if v != "?" if v != "-"]
             uniq = list(set(all_values))
             counts = {}
@@ -61,14 +65,14 @@ class CorrelatedModel(BaseModel):
             # If we sort these as strings then we get weird things like "10" < "2".
             # This can actually matter for things like ordinal models.
             # So convert these to ints first...
-            if all([v==str(int(v)) for v in uniq]):
+            if all([v.isdigit() for v in uniq]) and all([not v.startswith('0') for v in uniq]):
                 uniq = map(int, uniq)
                 uniq.sort()
                 uniq = map(str, uniq)
             # ...otherwise, just sort normally
             else:
                 uniq.sort()
-            if len(uniq) == 0 or (len(uniq) == 1 and self.remove_constant_traits):
+            if len(uniq) == 0 or (len(uniq) == 1 and self.remove_constant_features):
                 bad_traits.append(trait)
                 continue
             N = len(uniq)
@@ -77,8 +81,8 @@ class CorrelatedModel(BaseModel):
             self.dimensions[trait] = N*(N-1)/2
             self.codemaps[trait] = self.build_codemap(uniq)
             self.counts[trait] = counts
-        self.traits = [t for t in self.traits if t not in bad_traits]
-        self.traits.sort()
+        self.features = [t for t in self.features if t not in bad_traits]
+        self.features.sort()
         self.max_n_rates = (product(self.valuecounts.values()) * sum([i-1 for i in self.valuecounts.values()]))
 
     def add_state(self, state):
@@ -128,12 +132,10 @@ class CorrelatedModel(BaseModel):
     def add_data(self, distribution, trait, traitname):
         data = ET.SubElement(distribution,"data",{"id":traitname, "spec":"Alignment"})
         # How many characters do we need to reserve?
-        if max(self.valuecounts.values()) > 10:
-            raise NotImplementedError("The code is too simple to work with traits with more than 10 different values.")
-        for lang in self.config.languages:
+        for lang in self.languages:
             valuestring = ";;".join("%s" % 
                 self.data[lang][trait]
-                for trait in self.traits)
+                for trait in self.features)
             seq = ET.SubElement(data, "sequence", {"id":"seq_%s_%s" % (lang, traitname), "taxon":lang, "value":valuestring})
         userdatatype = ET.SubElement(
             data, "userDataType",
@@ -141,10 +143,10 @@ class CorrelatedModel(BaseModel):
              "split": ";;",
              # The componentSizes are bigger than the valuecounts because of the way ambiguities ("?" and "-", so 2) are encoded.
              # NOTE: Once we start to support ambiguities, this line needs adapting! 
-             "componentSizesIncludingAmbiguities": " ".join(str(self.valuecounts[trait]+2) for trait in self.traits),
+             "componentSizesIncludingAmbiguities": " ".join(str(self.valuecounts[trait]+2) for trait in self.features),
              "spec":
               "correlatedcharacters.polycharacter.CompoundDataType"})
-        for trait in self.traits:
+        for trait in self.features:
             subdatatype = ET.SubElement(
                 userdatatype, "components",
                 {"id":"traitDataType.%s:%s"%(traitname,trait),
@@ -223,6 +225,16 @@ class CorrelatedModel(BaseModel):
              "parameters": "@rawRates.s:%s" % traitname,
              "groupings": "@rateGroupings.s:%s" % traitname,
              "sizes": "@rateGroupingSizes.s:%s" % traitname,
+             "weight": "10.0"
+             })
+
+        ET.SubElement(
+            run, "operator",
+            {"id": "exchanger:%s" % traitname,
+             "spec": "beast.evolution.operators.DeltaExchangeOperator",
+             "parameter": "@rawRates.s:%s" % traitname,
+             "delta": "1.0",
+             "weightvector": "@rateGroupingSizes.s:%s" % traitname,
              "weight": "10.0"
              })
 
