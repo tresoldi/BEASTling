@@ -7,7 +7,6 @@ import xml.etree.ElementTree as ET
 import scipy.stats
 
 from .basemodel import BaseModel
-from ..fileio.unicodecsv import UnicodeDictReader
 
 class IncompatibleSettingOptions(Warning): pass
 
@@ -64,11 +63,9 @@ class CorrelatedModel(BaseModel):
             # Possibly all feature values are numeric strings, e.g. "1", "2", "3".
             # If we sort these as strings then we get weird things like "10" < "2".
             # This can actually matter for things like ordinal models.
-            # So convert these to ints first...
-            if all([v.isdigit() for v in uniq]) and all([not v.startswith('0') for v in uniq]):
-                uniq = map(int, uniq)
-                uniq.sort()
-                uniq = map(str, uniq)
+            # So sort by their int values...
+            if all([v.isdigit() for v in uniq]):
+                uniq.sort(key=int)
             # ...otherwise, just sort normally
             else:
                 uniq.sort()
@@ -95,6 +92,7 @@ class CorrelatedModel(BaseModel):
             state, "parameter",
             {"dimension": str(self.max_n_rates),
              "id": "rawRates.s:%s" % traitname,
+             "lower": "0.0",
              "name": "stateNode"})
         parameter.text="1.0"
 
