@@ -157,6 +157,8 @@ class BaseModel(object):
         self.messages.append("""[INFO] Model "%s": Using %d features from data source %s""" % (self.name, len(self.features), self.data_filename))
         if self.constant_feature and self.rate_variation:
             self.messages.append("""[WARNING] Model "%s": Rate variation enabled with constant features retained in data.  This may skew rate estimates for non-constant features.""" % self.name)
+        if self.pruned:
+            self.messages.append("""[DEPENDENCY] Model %s: Pruned trees are implemented in the BEAST package "BEASTLabs".""" % self.name)
 
     def build_codemap(self, unique_values):
         N = len(unique_values)

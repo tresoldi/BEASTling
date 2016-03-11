@@ -25,6 +25,7 @@ class CorrelatedModel(BaseModel):
     def __init__(self, model_config, global_config):
         if model_config.get("rate_variation", False):
             raise IncompatibleSettingOptions("Please do not specify rate_variation.")
+        self.independency = model_config.get("independenceprior", None)
         BaseModel.__init__(self, model_config, global_config)
 
     def preprocess(self):
@@ -126,6 +127,10 @@ class CorrelatedModel(BaseModel):
             {"id":"Dirichlet:%s.%d.0" % (traitname, n),
              "sizes" : "@rateGroupingSizes.s:%s" % traitname,
              "spec": "parameterclone.helpers.RescaledDirichlet"})
+
+        # Independency
+        if self.independency:
+            sub_prior = ET.SubElement(prior, "prior", {"spec":"correlatedcharacters.polycharacter.IndependentEvolutionPrior", "id":"independency.s:%s" % traitname, "name":"distribution", "model":"@substitutionmodel.s:%s"%traitname, "pIndependent": self.independency})
 
     def add_data(self, distribution, trait, traitname):
         data = ET.SubElement(distribution,"data",{"id":traitname, "spec":"Alignment"})
