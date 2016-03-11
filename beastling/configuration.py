@@ -4,6 +4,7 @@ import sys
 import re
 import io
 
+import importlib
 import newick
 from appdirs import user_data_dir
 from six.moves.urllib.request import FancyURLopener
@@ -16,6 +17,7 @@ import beastling.clocks.random as random
 import beastling.models.bsvs as bsvs
 import beastling.models.covarion as covarion
 import beastling.models.mk as mk
+
 
 
 GLOTTOLOG_NODE_LABEL = re.compile(
@@ -346,7 +348,16 @@ class Configuration(object):
                     self.message_flags.append("mk_used")
                     self.messages.append(mk.MKModel.package_notice)
             else:
-                raise ValueError("Unknown model type '%s' for model section '%s'." % (config["model"], config["name"]))
+                model_name = config["model"].lower()
+                try:
+                    model = importlib.import_module(".models."+config["model"], "beastling").Model(config, self)
+                except ImportError:
+                    raise ValueError("Unknown model type '%s' for model section '%s'." % (config["model"], config["name"]))
+                try:
+                    if model.package_notice not in self.messages:
+                        self.messages.append(model.package_notice)
+                except AttributeError:
+                    pass
             if config["model"].lower() != "covarion":
                 self.messages.append("""[DEPENDENCY] Model %s: AlignmentFromTrait is implemented in the BEAST package "BEAST_CLASSIC".""" % config["name"])
             self.messages.extend(model.messages)
