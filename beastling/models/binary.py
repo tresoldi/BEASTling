@@ -210,7 +210,10 @@ class BinaryModel(BaseModel):
                 # need to add one "all zeros" column to account for the recoding
                 extra_columns = ["0"]
             self.extracolumns[feature] = extra_columns
-
+            if "?" in point:
+                # TODO: THIS IS A HACK AND NOT WHERE THIS SHOULD BE HANDLED, BUT I NEED A FIX NOW
+                self.feature_has_unknown_values[feature] = True
+                point.remove("?")
             # Start with all zeros/question marks
             if "?" in point:
                 point.remove("?")
