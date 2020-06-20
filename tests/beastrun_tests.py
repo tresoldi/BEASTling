@@ -20,6 +20,7 @@ import beastling.beastxml
         (("admin", "mk", "cldf_data_with_nonstandard_value_column"), None),
         (("admin", "mk"), None),
         (("admin", "mk", "birthdeath"), None),
+        (("admin", "mk", "fbd"), None),
         (("admin", "mk", "uniform_treeprior"), None),
         (("admin", "mk_as_if_addon"), None),
         (("admin", "cldf_data"), None),
