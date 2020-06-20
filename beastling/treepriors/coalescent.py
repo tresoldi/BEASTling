@@ -14,6 +14,7 @@ class CoalescentTree (TreePrior):
             coalescent, id="TreeIntervals", spec="TreeIntervals", tree="@Tree.t:beastlingTree")
 
     def add_operators(self, beastxml):
+        super().add_operators(beastxml)
         xml.operator(
             beastxml.run,
             id="PopulationSizeScaler.t:beastlingTree",

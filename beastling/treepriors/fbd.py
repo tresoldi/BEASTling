@@ -115,6 +115,7 @@ class FossilizedBirthDeathTree (TreePrior):
         xml.log(tracer_logger, idref="rhoFBD.t:beastlingTree")
 
     def add_operators(self, beastxml):
+        super().add_operators(beastxml)
         if beastxml.config.languages.sample_branch_lengths:
             updown = xml.operator(
                 beastxml.run,
