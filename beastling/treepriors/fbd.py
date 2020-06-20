@@ -43,7 +43,7 @@ class FossilizedBirthDeathTree (TreePrior):
         xml.parameter(
             state,
             id="originFBD.t:beastlingTree", lower="0.0", name="stateNode",
-            text="10000.0")
+            text="100.0")
         if self.treeheight_estimate is not None:
             # We have already estimated a better starting point than the arbitrary 10000.0
             param.text = str(self.treehight_estimate)
