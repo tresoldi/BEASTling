@@ -10,22 +10,11 @@ import pytest
 import beastling.configuration
 import beastling.beastxml
 
-skip = [
-    ("admin", "mk", "cldf_data_with_comma", "rate_var"),
-    # Beast interprets commas as separating alternative IDs (we
-    # think), so identical text before the comma -- as happens for the
-    # rate parameters in this test, because of the features' IDs --
-    # leads to beast finding duplicate IDs and dying. This behaviour
-    # is documented in the guidelines for IDs, but it would be nice to
-    # get rid of it, either by not creating objects with commas in IDs
-    # or by fixing beast not to split IDs.
-]
-
 
 @pytest.mark.beast
 @pytest.mark.slow
 @pytest.mark.parametrize(
-    'configs,assertion',
+    ('configs', 'assertion'),
     [
         (("admin", "mk", "subsample"), None),
         (("admin", "mk", "cldf_data_with_nonstandard_value_column"), None),
@@ -38,6 +27,16 @@ skip = [
         (("admin", "cldf1_wordlist_with_lang_table"), None),
         (("admin", "cldf1_wordlist_external_codes"), None),
         (("admin", "cldf1_structure"), None),
+        # Beast interprets commas as separating alternative IDs (we think), so
+        # identical text before the comma -- as happens for the rate parameters
+        # in this test, because of the features' IDs -- leads to beast finding
+        # duplicate IDs and dying. This behaviour is documented in the
+        # guidelines for IDs, but it would be nice to get rid of it, either by
+        # not creating objects with commas in IDs or by fixing beast not to
+        # split IDs.
+        pytest.param(
+            ("admin", "mk", "cldf_data_with_comma", "rate_var"), None,
+            marks=pytest.mark.xfail),
         (("admin", "nonnumeric"), None),
         (("admin", "noncode"), None),
         (("admin", "bsvs"), None),
@@ -168,8 +167,6 @@ def test_beastrun(configs, assertion, config_factory, tmppath):
     """Turn each BEASTling config file in tests/configs into a
     BEAST.xml, and feed it to BEAST, testing for a zero return
     value, which suggests no deeply mangled XML."""
-    if configs in skip:
-        return
 
     with warnings.catch_warnings(record=True) as w:
         warnings.simplefilter("always")
