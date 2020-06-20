@@ -17,7 +17,9 @@ class FossilizedBirthDeathTree (TreePrior):
     > https://doi.org/10.1371/journal.pcbi.1003919
 
     """
-    # TODO: Request SA (Sampled Ancestors) package
+    __type__ = "fbd"
+    package_notice = ("fbd", "Sampled Ancestors")
+
     def add_state_nodes(self, beastxml):
         """ Add tree-related <state> sub-elements.
 

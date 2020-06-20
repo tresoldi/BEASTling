@@ -210,12 +210,7 @@ class Configuration(object):
         # We also know what kind of tree prior we need to have –
         # instantiate_calibrations may have changed the type if tip
         # calibrations exist.
-        self.treeprior = {
-            "uniform": treepriors.UniformTree,
-            "yule": treepriors.YuleTree,
-            "birthdeath": treepriors.BirthDeathTree,
-            "coalescent": CoalescentTree
-        }[self.languages.tree_prior]()
+        self.treeprior = self.languages.get_tree_prior()
 
         # Now we can set the value of the ascertained attribute of each model
         # Ideally this would happen during process_models, but this is impossible
@@ -678,7 +673,6 @@ class Configuration(object):
                 ## happen to only have one language for
                 log.info("Calibration on '%s' taken as tip age calibration." % clade)
                 is_tip_calibration = True
-                self.languages.tree_prior = "coalescent"
             else: # pragma: no cover
                 # At this point we have a non-originate calibration on
                 # a single taxa, which is not the result of

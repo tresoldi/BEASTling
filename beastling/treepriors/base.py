@@ -7,6 +7,8 @@ from beastling.util import xml
 
 
 class TreePrior (ABC):
+    __type__: t.Optional[str] = None
+    package_notice: t.Optional[t.Tuple[str, str]] = None
     tree_id: str = "Tree.t:beastlingTree"
 
     def __init__(self):
@@ -179,6 +181,8 @@ class TreePrior (ABC):
 
 
 class YuleTree (TreePrior):
+    __type__ = 'yule'
+
     def add_prior(self, beastxml):
         """
         Add Yule birth-process tree prior.
@@ -272,6 +276,8 @@ class YuleTree (TreePrior):
 
 
 class BirthDeathTree (TreePrior):
+    __type__ = 'birthdeath'
+
     def add_prior(self, beastxml):
         """Add a (calibrated) birth-death tree prior."""
         # Tree prior
@@ -283,7 +289,11 @@ class BirthDeathTree (TreePrior):
         attribs["birthDiffRate"] = "@birthRate.t:beastlingTree"
         attribs["relativeDeathRate"] = "@deathRate.t:beastlingTree"
         attribs["sampleProbability"] = "@sampling.t:beastlingTree"
-        attribs["type"] = "unscaled" #TODO: Someone dropped the "restricted" type here, which does not exist.
+        # TODO: Someone dropped the "restricted" type here, which does not
+        # exist. It looks like "unscaled" is correct – all other options are
+        # other methods of counting trees, up to some other symmetry, as
+        # described in the paper – but the documentation is not very good.
+        attribs["type"] = "unscaled"
         xml.distribution(beastxml.prior, attrib=attribs)
 
         # Birth rate prior
@@ -384,6 +394,7 @@ class BirthDeathTree (TreePrior):
 
 
 class UniformTree (TreePrior):
+    __type__ = 'uniform'
     def add_prior(self, beastxml):
         """Add nothing.
 

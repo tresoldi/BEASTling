@@ -13,6 +13,8 @@ from beastling.clocks import *  # Make sure all clocks are imported.
 from beastling.clocks.baseclock import BaseClock
 from beastling.models import *  # Make sure all models are imported.
 from beastling.models.basemodel import BaseModel
+from beastling.treepriors import *  # Make sure all models are imported.
+from beastling.treepriors.base import TreePrior
 
 __all__ = ['Admin', 'MCMC', 'Languages']
 
@@ -356,8 +358,18 @@ class Languages(Section):
     tree_prior = opt(
         "yule",
         "Tree prior. Can be overridden by calibrations.",
-        validator=attr.validators.in_(['yule', 'coalescent', 'birthdeath', 'uniform']),
-        converter=lambda s: s.lower())
+        validator=attr.validators.in_(
+            set(cls.__type__.lower()
+                for cls in all_subclasses(TreePrior)
+                if cls.__type__)),
+        converter=str.lower)
+
+    def get_tree_prior(self):
+        for cls in all_subclasses(TreePrior):
+            if cls.__type__ == self.tree_prior:
+                if cls.package_notice:
+                    log.dependency(*cls.package_notice)
+                return cls()
 
     def __attrs_post_init__(self):
         self.exclusions = set(self.exclusions)
@@ -404,7 +416,11 @@ class Clock(Section):
     name = opt(None, converter=lambda s: s[5:].strip())
     type = opt(
         'strict',
-        validator=attr.validators.in_(set(cls.__type__ for cls in all_subclasses(BaseClock))))
+        validator=attr.validators.in_(
+            set(cls.__type__.lower()
+                for cls in all_subclasses(BaseClock)
+                if cls.__type__)),
+        converter=str.lower)
     distribution = opt('lognormal', converter=lambda s: s.lower())
     mean = opt(None, getter=ConfigParser.getfloat)
     variance = opt(None, getter=ConfigParser.getfloat)
