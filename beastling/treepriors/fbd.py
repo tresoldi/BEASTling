@@ -20,7 +20,7 @@ class FossilizedBirthDeathTree (TreePrior):
     __type__ = "fbd"
     package_notice = ("fbd", "Sampled Ancestors")
 
-    def add_state_nodes(self, beastxml):
+    def add_parameters(self, state):
         """ Add tree-related <state> sub-elements.
 
         Add real parameters for the following FBD parameters:
@@ -31,8 +31,6 @@ class FossilizedBirthDeathTree (TreePrior):
          - removal probability
          - rho
         """
-        super().add_state_nodes(beastxml)
-        state = beastxml.state
         param = xml.parameter(
             state,
             id="diversificationRateFBD.t:beastlingTree", lower="0.0", name="stateNode",
@@ -57,14 +55,14 @@ class FossilizedBirthDeathTree (TreePrior):
             text="0.5")
         xml.parameter(
             state,
-            id="rFBD.t:beastlingTree", lower="0.0", name="removalProbability", upper="1.0",
+            id="rFBD.t:beastlingTree", lower="0.0", name="stateNode", upper="1.0",
             text="0.0")
         xml.parameter(
             state,
             # TODO: Why estimate=False? This is adapted from the bears example from SA.
             # The parameter describes "Probability of an individual to be sampled at present"
-            id="rhoFBD.t:beastlingTree", estimate="false", lower="0.0", name="rho", upper="1.0",
-            text="1.0")
+            id="rhoFBD.t:beastlingTree", lower="0.0", name="stateNode", upper="1.0",
+            estimate="false", text="1.0")
 
     def add_prior(self, beastxml):
         """Add a calibrated fossilized birth-death tree prior.
@@ -127,7 +125,7 @@ class FossilizedBirthDeathTree (TreePrior):
                     "weight": "3.0"})
 
             xml.tree(updown, idref="Tree.t:beastlingTree", name="up")
-            xml.parameter(updown, idref="@originFBD.t:beastlingTree", name="up")
+            xml.parameter(updown, idref="originFBD.t:beastlingTree", name="up")
             xml.parameter(updown, idref="diversificationRateFBD.t:beastlingTree", name="down")
             # Include clock rates in up/down only if calibrations are given
             if beastxml.config.calibrations:
