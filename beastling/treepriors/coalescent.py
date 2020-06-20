@@ -25,7 +25,6 @@ class CoalescentTree (TreePrior):
     def add_fine_logging(self, tracer_logger):
         xml.log(tracer_logger, idref="popSize.t:beastlingTree")
 
-    def add_state_nodes(self, beastxml):
-        super().add_state_nodes(beastxml)
+    def add_parameters(self, state):
         xml.parameter(
-            beastxml.state, text="1.0", id="popSize.t:beastlingTree", name="stateNode")
+            state, text="1.0", id="popSize.t:beastlingTree", name="stateNode")

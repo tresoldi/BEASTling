@@ -25,6 +25,11 @@ class TreePrior (ABC):
         xml.taxonset(self.tree, idref="taxa")
         if beastxml.config.tip_calibrations:
             self.add_tip_heights(beastxml.config.tip_calibrations)
+        self.add_parameters(state)
+
+    @abstractmethod
+    def add_parameters(self, state):
+        ...
 
     def estimate_height(self, config):
         birthrate_estimates = []
@@ -229,12 +234,10 @@ class YuleTree (TreePrior):
         xml.log(tracer_logger, idref="YuleModel.t:beastlingTree")
         xml.log(tracer_logger, idref="YuleBirthRatePrior.t:beastlingTree")
 
-    def add_state_nodes(self, beastxml):
+    def add_parameters(self, state):
         """
         Add tree-related <state> sub-elements.
         """
-        super().add_state_nodes(beastxml)
-        state = beastxml.state
         param = xml.parameter(state, id="birthRate.t:beastlingTree", name="stateNode")
         if self.birthrate_estimate is not None:
             param.text=str(self.birthrate_estimate)
@@ -320,24 +323,22 @@ class BirthDeathTree (TreePrior):
         sub_prior = xml.prior(beastxml.prior, attrib=attribs)
         xml.Uniform(sub_prior, id="Uniform.3", name="distr", lower="0", upper="1")
 
-    def add_state_nodes(self, beastxml):
+    def add_parameters(self, state):
         """
         Add tree-related <state> sub-elements.
         """
-        super().add_state_nodes(beastxml)
-        state = beastxml.state
         param = xml.parameter(state, id="birthRate.t:beastlingTree", name="stateNode")
         if self.birthrate_estimate is not None:
             param.text = str(self.birthrate_estimate)
         else:
             param.text = "1.0"
         xml.parameter(
-            beastxml.state,
+            state,
             text="0.5",
             id="deathRate.t:beastlingTree",
             name="stateNode")
         xml.parameter(
-            beastxml.state,
+            state,
             text="0.2",
             id="sampling.t:beastlingTree",
             name="stateNode")
@@ -408,5 +409,12 @@ class UniformTree (TreePrior):
         """Add nothing.
 
         For a uniform tree prior, there are no parameters to log.
+
+        """
+
+    def add_parameters(self, tracer_logger):
+        """Add nothing.
+
+        For a uniform tree prior, there are no parameters.
 
         """
