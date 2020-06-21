@@ -131,6 +131,7 @@ class LogNormalRelaxedClock(RelaxedClock):
             M="1.0",
             S="@ucldSdev.c:%s" % self.name,
             meanInRealSpace="true",
+            # S is always in log space.
             name="distr")
 
     def add_operators(self, run):
