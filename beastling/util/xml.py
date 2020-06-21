@@ -61,6 +61,7 @@ def _subelement(tag, parent, text=None, attrib=None, **kw):
 
 
 alignment = functools.partial(_subelement, 'alignment')
+Beta = functools.partial(_subelement, 'Beta')
 branchratemodel = functools.partial(_subelement, 'branchratemodel')  # FIXME: check!
 branchRateModel = functools.partial(_subelement, 'branchRateModel')
 data = functools.partial(_subelement, 'data')
