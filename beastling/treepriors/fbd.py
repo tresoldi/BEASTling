@@ -3,6 +3,53 @@ import typing as t
 from beastling.treepriors.base import TreePrior
 from beastling.util import xml
 
+# The definition in the BEAST package, for reference
+BEAST_DEF = """
+    //'direct' parameters
+    public Input<RealParameter> originInput =
+            new Input<RealParameter>("origin", "The time when the process started", (RealParameter)null);
+    public Input<RealParameter> birthRateInput =
+            new Input<RealParameter>("birthRate", "Birth rate", Input.Validate.REQUIRED);
+    public Input<Function> deathRateInput =
+            new Input<Function>("deathRate", "Death rate", Input.Validate.REQUIRED);
+    public Input<RealParameter> samplingRateInput =
+            new Input<RealParameter>("samplingRate", "Sampling rate per individual", Input.Validate.REQUIRED);
+
+    //transformed parameters:
+    public Input<RealParameter> expectedNInput =
+            new Input<RealParameter>("expectedN", "The expected-N-at-present parameterisation of T",(RealParameter)null);
+    public Input<RealParameter> diversificationRateInput =
+            new Input<RealParameter>("diversificationRate", "Net diversification rate. Birth rate - death rate", Input.Validate.XOR, birthRateInput);
+    public Input<Function> turnoverInput =
+            new Input<Function>("turnover", "Turnover. Death rate/birth rate", Input.Validate.XOR, deathRateInput);
+    public Input<RealParameter> samplingProportionInput =
+            new Input<RealParameter>("samplingProportion", "The probability of sampling prior to death. Sampling rate/(sampling rate + death rate)", Input.Validate.XOR, samplingRateInput);
+
+
+    // r parameter
+    public Input<RealParameter> removalProbability =
+            new Input<RealParameter>("removalProbability", "The probability that an individual is removed from the process after the sampling", Input.Validate.REQUIRED);
+
+    public Input<RealParameter> rhoProbability =
+            new Input<RealParameter>("rho", "Probability of an individual to be sampled at present", (RealParameter)null);
+
+    // if the tree likelihood is condition on sampling at least one individual then set to true one of the inputs:
+    public Input<Boolean> conditionOnSamplingInput = new Input<Boolean>("conditionOnSampling", "the tree " +
+            "likelihood is conditioned on sampling at least one individual if condition on origin or at least one individual on both sides of the root if condition on root", false);
+    public Input<Boolean> conditionOnRhoSamplingInput = new Input<Boolean>("conditionOnRhoSampling", "the tree " +
+            "likelihood is conditioned on sampling at least one individual in present if condition on origin or at lease one extant individual on both sides of the root if condition on root", false);
+
+    public Input<Boolean> conditionOnRootInput = new Input<Boolean>("conditionOnRoot", "the tree " +
+            "likelihood is conditioned on the root height otherwise on the time of origin", false);
+
+    public Input<Taxon> taxonInput = new Input<Taxon>("taxon", "a name of the taxon for which to calculate the prior probability of" +
+            "being sampled ancestor under the model", (Taxon) null);
+
+    public final Input<IntegerParameter> SATaxonInput = new Input<IntegerParameter>("SAtaxon", "A binary parameter is equal to zero " +
+            "if the taxon is not a sampled ancestor (that is, it does not have sampled descendants) and to one " +
+            "if it is a sampled ancestor (that is, it has sampled descendants)", (IntegerParameter)null);
+"""
+
 
 class FossilizedBirthDeathTree (TreePrior):
     """A generalization of the Fossilized Birth Death (FBD) tree prior.
@@ -18,7 +65,7 @@ class FossilizedBirthDeathTree (TreePrior):
 
     """
     __type__ = "fbd"
-    package_notice = ("fbd", "Sampled Ancestors")
+    package_notice = ("fbd", "Sampled Ancestors (SA)")
 
     def add_parameters(self, state):
         """ Add tree-related <state> sub-elements.
@@ -53,10 +100,11 @@ class FossilizedBirthDeathTree (TreePrior):
             state,
             id="turnoverFBD.t:beastlingTree", lower="0.0", name="stateNode", upper="1.0",
             text="0.5")
+        # Probability of removal after sampling – Fixed to 1 for the FBD tree prior
         xml.parameter(
             state,
             id="rFBD.t:beastlingTree", lower="0.0", name="stateNode", upper="1.0",
-            text="0.0")
+            text="1.0")
         xml.parameter(
             state,
             # TODO: Why estimate=False? This is adapted from the bears example from SA.
@@ -74,11 +122,15 @@ class FossilizedBirthDeathTree (TreePrior):
         xml.distribution(
             beastxml.prior,
             id="FBD.t:beastlingTree", spec="beast.evolution.speciation.SABirthDeathModel",
+            tree="@Tree.t:beastlingTree",
+            # We have no knowledge when this diversification process started or
+            # how many extant languages we should have been looking for, this
+            # dataset is all we have.
+            conditionOnRoot="true",
+            # If there were less than 2 extant languages, we would not look at this tree.
             conditionOnRhoSampling="true",
             diversificationRate="@diversificationRateFBD.t:beastlingTree",
-            origin="@originFBD.t:beastlingTree",
             samplingProportion="@samplingProportionFBD.t:beastlingTree",
-            tree="@Tree.t:beastlingTree",
             turnover="@turnoverFBD.t:beastlingTree",
             removalProbability="@rFBD.t:beastlingTree",
             rho="@rhoFBD.t:beastlingTree")
@@ -111,7 +163,6 @@ class FossilizedBirthDeathTree (TreePrior):
         xml.log(tracer_logger, idref="originFBD.t:beastlingTree")
         xml.log(tracer_logger, idref="samplingProportionFBD.t:beastlingTree")
         xml.log(tracer_logger, idref="turnoverFBD.t:beastlingTree")
-        xml.log(tracer_logger, idref="rFBD.t:beastlingTree")
         xml.log(tracer_logger, idref="rhoFBD.t:beastlingTree")
 
     def add_operators(self, beastxml):
@@ -160,6 +211,22 @@ class FossilizedBirthDeathTree (TreePrior):
                 "parameter": "@turnoverFBD.t:beastlingTree",
                 "scaleFactor": "0.5",
                 "weight": "3.0"})
+        # Continue to assume complete sampling for contemporary leaves
+        #         "parameter": "@rhoFBD.t:beastlingTree",
+
+
+class SampledAncestorsTree (FossilizedBirthDeathTree):
+    """A sampled ancestors tree is a generalization of the FBD tree.
+
+    In a FBD tree, a thing either fossilizes or leaves descendants. In a SA
+    tree, a proportion 0≤r≤1 of fossils also has later descendants.
+
+    """
+    __type__ = "sampled-ancestors"
+    package_notice = ("Sampled Ancestors tree prior", "Sampled Ancestors (SA)")
+
+    def add_operators(self, beastxml):
+        super().add_operators(beastxml)
         xml.operator(
             beastxml.run,
             attrib={
@@ -169,5 +236,6 @@ class FossilizedBirthDeathTree (TreePrior):
                 "scaleFactor": "0.5",
                 "weight": "3.0"})
 
-        # Continue to assume complete sampling for contemporary leaves
-        #         "parameter": "@rhoFBD.t:beastlingTree",
+    def add_fine_logging(self, tracer_logger):
+        super().add_fine_logging(tracer_logger)
+        xml.log(tracer_logger, idref="rFBD.t:beastlingTree")
