@@ -17,6 +17,8 @@ class BaseClock(FromOptions):
                 clock_config.estimate_rate = False
         else:
             self.initial_mean = 1.0
+            if clock_config.estimate_rate is None:
+                clock_config.estimate_rate = True
         self.estimate_rate = clock_config.estimate_rate
         self.calibrations = global_config.calibrations
         self.mean_rate_id = "clockRate.c:%s" % self.name
