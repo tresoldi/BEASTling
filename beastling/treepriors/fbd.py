@@ -72,11 +72,10 @@ class FossilizedBirthDeathTree (TreePrior):
 
         Add real parameters for the following FBD parameters:
          - diversification rate
-         - origin
          - sampling proportion
          - turnover
          - removal probability
-         - rho
+         - probability of an extant languages to be in the sample (ρ)
         """
         param = xml.parameter(
             state,
@@ -100,15 +99,18 @@ class FossilizedBirthDeathTree (TreePrior):
             state,
             id="turnoverFBD.t:beastlingTree", lower="0.0", name="stateNode", upper="1.0",
             text="0.5")
-        # Probability of removal after sampling – Fixed to 1 for the FBD tree prior
+        # Probability of removal of a fossile after sampling – Fixed to 1 for
+        # the FBD tree prior. The SA prior may modify this.
         xml.parameter(
             state,
             id="rFBD.t:beastlingTree", lower="0.0", name="stateNode", upper="1.0",
             text="1.0")
         xml.parameter(
             state,
-            # TODO: Why estimate=False? This is adapted from the bears example from SA.
-            # The parameter describes "Probability of an individual to be sampled at present"
+            # TODO: Why estimate=False? This is adapted from the bears example
+            # from SA. The parameter describes "Probability of an individual to
+            # be sampled at present". So if we have no reason to assume we
+            # sampled all languages, we should reflect that here.
             id="rhoFBD.t:beastlingTree", lower="0.0", name="stateNode", upper="1.0",
             estimate="false", text="1.0")
 
@@ -141,11 +143,6 @@ class FossilizedBirthDeathTree (TreePrior):
         xml.Uniform(sub_prior, name="distr", upper="Infinity")
         sub_prior = xml.prior(
             beastxml.prior,
-            id="originPriorFBD.t:beastlingTree", name="distribution",
-            x="@originFBD.t:beastlingTree")
-        xml.Uniform(sub_prior, name="distr", upper="Infinity")
-        sub_prior = xml.prior(
-            beastxml.prior,
             id="samplingProportionPriorFBD.t:beastlingTree", name="distribution",
             x="@samplingProportionFBD.t:beastlingTree")
         xml.Beta(sub_prior, name="distr", alpha="20.0", beta="0.5")
@@ -160,7 +157,6 @@ class FossilizedBirthDeathTree (TreePrior):
 
         """
         xml.log(tracer_logger, idref="diversificationRateFBD.t:beastlingTree")
-        xml.log(tracer_logger, idref="originFBD.t:beastlingTree")
         xml.log(tracer_logger, idref="samplingProportionFBD.t:beastlingTree")
         xml.log(tracer_logger, idref="turnoverFBD.t:beastlingTree")
         xml.log(tracer_logger, idref="rhoFBD.t:beastlingTree")
@@ -177,7 +173,6 @@ class FossilizedBirthDeathTree (TreePrior):
                     "weight": "3.0"})
 
             xml.tree(updown, idref="Tree.t:beastlingTree", name="up")
-            xml.parameter(updown, idref="originFBD.t:beastlingTree", name="up")
             xml.parameter(updown, idref="diversificationRateFBD.t:beastlingTree", name="down")
             # Include clock rates in up/down only if calibrations are given
             if beastxml.config.calibrations:
