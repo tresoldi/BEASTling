@@ -113,10 +113,10 @@ def handle_file_or_list(value):
     """
     if not isinstance(value, (list, tuple, set)):
         fname = pathlib.Path(value)
-        if fname.exists():
+        try:
             with fname.open() as fid:
                 return ConfigValue([line.strip() for line in fid], fname)
-        else:
+        except OSError:
             return [x.strip() for x in value.split(",")]
     return value
 
@@ -138,8 +138,17 @@ def get_tree(tree_type, cfg, section, option):
     assert tree_type in ("starting", "monophyly")
     # Read from file if necessary
     fname = pathlib.Path(value)
-    if fname.exists() and fname.is_file():
+    try:
         value = fname.read_text(encoding='utf8').strip()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        # TODO: Could be 'file name too long', which points to it being a tree
+        # instead. Could be something else we haven't thought about yet.
+        pass
+    except (IsADirectoryError, UnicodeDecodeError, PermissionError):
+        # File might exist, but is not helpful
+        raise
     if value:
         if ")" in value:
             return value
