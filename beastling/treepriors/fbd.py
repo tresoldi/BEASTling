@@ -34,14 +34,14 @@ class FossilizedBirthDeathTree (TreePrior):
         param = xml.parameter(
             state,
             id="diversificationRateFBD.t:beastlingTree", lower="0.0", name="stateNode",
-            text="1.0")
+            text="0.001")
         if self.birthrate_estimate is not None:
             # We have already estimated a better starting point than the arbitrary 1.0
             param.text = str(self.birthrate_estimate)
         xml.parameter(
             state,
             id="originFBD.t:beastlingTree", lower="0.0", name="stateNode",
-            text="100.0")
+            text="10000.0")
         if self.treeheight_estimate is not None:
             # We have already estimated a better starting point than the arbitrary 10000.0
             param.text = str(self.treehight_estimate)
@@ -96,7 +96,7 @@ class FossilizedBirthDeathTree (TreePrior):
             beastxml.prior,
             id="samplingProportionPriorFBD.t:beastlingTree", name="distribution",
             x="@samplingProportionFBD.t:beastlingTree")
-        xml.Uniform(sub_prior, name="distr")
+        xml.Beta(sub_prior, name="distr", alpha="20.0", beta="0.5")
         sub_prior = xml.prior(
             beastxml.prior,
             id="turnoverPriorFBD.t:beastlingTree", name="distribution",
