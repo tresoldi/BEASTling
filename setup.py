@@ -38,7 +38,7 @@ setup(
         ],
     },
     entry_points={
-        'console_scripts': ['beastling=beastling.cli:main'],
+        'console_scripts': ['beastling_patch=beastling.cli:main'],
     },
     package_data={'beastling': ['data/*']},
 )
