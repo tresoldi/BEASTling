@@ -4,7 +4,7 @@ from beastling import __version__ as version
 
 
 setup(
-    name='beastling',
+    name='beastling_patch',
     version=version,
     description='Command line tool to help mortal linguists use BEAST',
     author='Luke Maurits',
@@ -40,5 +40,5 @@ setup(
     entry_points={
         'console_scripts': ['beastling_patch=beastling.cli:main'],
     },
-    package_data={'beastling': ['data/*']},
+    package_data={'beastling_patch': ['data/*']},
 )
